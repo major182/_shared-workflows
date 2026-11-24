@@ -9,6 +9,10 @@ on:
         description: レビューに使うモデル
         type: string
         default: claude-sonnet-5-5
+      effort:
+        description: 考える深さ（low・medium・high・xhigh・max）。プッシュのたびに動くため、標準は使用量とのつり合いで medium
+        type: string
+        default: medium
       extra_prompt:
         description: プロジェクト固有の追加の観点（任意）
         type: string
@@ -39,6 +43,7 @@ jobs:
           github_token: ${{ github.token }}
           claude_args: >-
             --model ${{ inputs.model }}
+            --effort ${{ inputs.effort }}
             --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
           prompt: |
             REPO: ${{ github.repository }}
