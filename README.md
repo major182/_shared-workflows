@@ -1,4 +1,4 @@
-# shared-workflows
+# _shared-workflows
 
 複数のリポジトリで使う GitHub Actions の共通ワークフロー。
 
