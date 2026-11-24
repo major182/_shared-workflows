@@ -15,7 +15,7 @@ PR を開いたとき・PR のブランチにプッシュしたときに、Claud
 1. 手元で `claude setup-token` を実行し、トークンを作る（Pro・Max プラン）
 2. 使うリポジトリの Secret に登録する：`gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>`（値は貼り付けて入力する）
 3. [examples/claude-review.yml](examples/claude-review.yml) を、そのリポジトリの `.github/workflows/` にコピーする
-4. プロジェクト固有の観点は `with.extra_prompt` で足す
+4. プロジェクト固有の観点は `with.extra_prompt` で足す。考える深さは `with.effort`（標準は medium）で変えられる
 
 ### 版の管理
 
