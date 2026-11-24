@@ -1,0 +1,90 @@
+# PR の自動レビュー（呼び出される側の共通ワークフロー）
+# 呼び出し方は examples/claude-review.yml を参照。
+name: Claude Review
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: レビューに使うモデル
+        type: string
+        default: claude-sonnet-5-5
+      extra_prompt:
+        description: プロジェクト固有の追加の観点（任意）
+        type: string
+        default: ""
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: claude-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1.0.289
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          claude_args: >-
+            --model ${{ inputs.model }}
+            --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR: ${{ github.event.pull_request.number }}
+            BASE: origin/${{ github.event.pull_request.base.ref }}
+
+            この PR をレビューする。PR のブランチはチェックアウト済み。
+            読み手は利用者ではなく、指摘を受けて修正する Claude Code。修正に必要な情報だけを書く。
+
+            ## 手順
+            1. `gh pr view <PR> --comments` で PR の説明と、前回のレビュー（`<!-- claude-review -->` を含むコメント）を読む
+            2. `gh pr diff <PR>` で差分を読み、必要なら周辺のコードと、リポジトリの CLAUDE.md・docs/ の設計書を読む
+            3. PR の今の状態全体を対象に、修正が必要な点だけを洗い出す
+               - 前回の指摘で直ったものは書かない。前回 PR のコメントで「対応しない」と理由つきで返されたものは繰り返さない
+               - 差分の外の既存の問題は、この PR の変更で悪化・露出したときだけ書く
+
+            ## 観点（該当するものだけ）
+            - 不具合：ロジックの誤り・境界値・null・例外処理・競合・リソースの解放漏れ
+            - セキュリティ：入力の検証・認可・注入・秘密情報の扱い
+            - 設計書・仕様（docs/）と実装の食い違い
+            - テスト：実装に単体テスト（必要なら結合テスト）が伴っているか、分岐・境界値・異常系の抜け、テスト仕様書（docs/）の更新漏れ、テストのために本体（アプリのコード・設定）を変えていないか
+            - 開発版と本番（配布版）の保存先・名前の分離が崩れていないか
+            - ワークフロー（.github/）：権限の最小化・版の固定・秘密情報の扱い
+            - 公開リポジトリに出てはいけないもの：秘密情報・本物のメールアドレス・クラウドの識別子（AWS のアカウント ID・ARN など）・VPN／内部の名前や IP
+            ${{ inputs.extra_prompt }}
+
+            ## 書かないもの
+            - 良い点・感想・要約・PR の説明の言い換え
+            - 好みの問題、lint・整形・型チェックで機械的に見つかるもの（CI が別に確かめる）
+            - 確信のない推測（根拠を示せないものは書かない）
+
+            ## 出力
+            指摘はすべて 1 つのコメントにまとめ、次のコマンドで投稿する（前回のコメントを上書きする）。
+            `gh pr comment <PR> --edit-last --create-if-none --body "<本文>"`
+            本文の形式（日本語。指摘のない重要度の見出しは省く）：
+
+            <!-- claude-review -->
+            ## Claude レビュー（<短いコミット SHA>）
+            ### 必須
+            1. `path/to/file:行` 問題（1〜2 文）→ 直し方（1〜2 文）
+            ### 推奨
+            1. （同じ形式）
+
+            指摘が 1 つもないときの本文は、次の 2 行だけにする。
+            <!-- claude-review -->
+            ## Claude レビュー（<短いコミット SHA>）：指摘なし
+
+            コメントの本文にも、秘密情報・クラウドの識別子・内部の名前を書かない（該当箇所はファイルと行で示す）。
+            GitHub への投稿は上のコメント 1 件だけにする。
